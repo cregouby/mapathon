@@ -1,0 +1,64 @@
+---
+title: "EDA"
+author: "C.R."
+date: "07/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(skimr)
+```
+
+## EDA Eurostat
+
+
+```{r eurostat}
+eurostat <- read_csv(here("data/external/Eurostats_long.csv")) %>% 
+  pivot_wider(names_from = tra_meas, values_from=n) %>% 
+  mutate(date = ymd(str_c(date, "-01"))) %>% select(-annee,-mois) %>% 
+  select(ville, date, ac_tot=ACM, ac_commercial=CACM, fret_tot=FRM_LD_NLD, pax_tot=PAS_CRD, pax_transit=PAS_TRF, pax_transfert=PAS_TRS) 
+
+skim(eurostat)
+```
+
+## Eurostat Plots
+
+
+```{r pressure, echo=FALSE}
+eurostat_norm <- eurostat %>% 
+  pivot_longer(c("ac_tot", "ac_commercial","fret_tot", "pax_tot", "pax_transit", "pax_transfert")) %>% 
+  group_by(name) %>% 
+  mutate(value = value/value[date=="2010-01-01" & ville=="PARIS"][1L])
+
+ggplot(eurostat_norm %>% group_by(ville) , aes(x=date, y=value, color=ville))+
+  geom_line()+facet_wrap(~name)+   theme_minimal() +
+  theme(legend.position = "none") + 
+  labs("evolution des grandeurs", sub = "normalisé à 1: le premier mois à Paris")
+
+eurostat_norm_each <- eurostat %>% 
+  pivot_longer(c("ac_tot", "ac_commercial","fret_tot", "pax_tot", "pax_transit", "pax_transfert")) %>% 
+  group_by(name, ville) %>% 
+  mutate(value = value/max(value,na.rm=T))
+
+ggplot(eurostat_norm_each %>% filter(!ville=="PARIS") %>%  group_by(ville) , aes(x=date, y=value, color=ville))+
+  geom_line(alpha=0.2)+facet_wrap(~name)+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs("evolution des grandeurs", sub = "normalisé à 1: le premier mois pour chaque ville")
+
+```
+# DGAC Flux
+```{r}
+# provides a better precision
+villes <- read_csv(here("data/external/villes.csv"))
+
+dgac <- read_csv(here("data/external/DGAC_flux.csv")) %>% 
+  mutate(start = ymd(str_c(Annee,"-01-01")) ,
+         stop = ymd(str_c(Annee+1,"-01-01"))-1,
+         interval = interval(start, stop )) %>% 
+    select(-Annee, -start, -stop)
+```
+
