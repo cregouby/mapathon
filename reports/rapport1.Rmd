@@ -1,8 +1,12 @@
 ---
-title: "mapdeck plot"
-author: "C.R."
+title: "Cartomob Mapathon 2020"
+subtitle: "Tous (im)mobiles, tous cartographes ?"
+author: "Christophe Regouby"
 date: "07/10/2020"
-output: html_document
+output: 
+  html_document:
+    theme: darkly
+    highlight: default
 ---
 
 ```{r setup, include=FALSE}
@@ -16,11 +20,11 @@ library(pins)
 ```
 
 # Introduction 
-Le jeu de données proposé pour le mapathon 2020 de gflowviz regroupe un jeu de donnée des flux de transport aéronautique en France métropolitaine, échantillonné sur 5 années clef entre 1999 et 2019, et une série temporelle de donnée de comptage de ces flux aéronautiques par ville et par mois entre 2010 et 2020. Nous avons choisi de nous concentrer sur l'année 2019, car récente, et présente dans les deux jeux de donnée.
+Le jeu de données proposé pour le  **mapathon 2020 de Cartomob** regroupe un jeu de donnée des flux de transport aéronautique en France métropolitaine, échantillonné sur 5 années clef entre 1999 et 2019, et une série temporelle de donnée de comptage de ces flux aéronautiques par ville et par mois entre 2010 et 2020. Nous avons choisi de nous concentrer sur l'année 2019, car récente, et présente dans les deux jeux de donnée.
 
 # Une France Jacobine
 
-À partir du jeu de donnée des flux de transport aérien en France métropolitaine, nous nous intéressons à l'année 2019: c'est les flux totaux de passager qui attirent notre attention sur un classement des aéroports :
+À partir du jeu de donnée des flux de transport aérien en France métropolitaine, nous nous intéressons donc à l'année 2019 uniquement: c'est les flux totaux de passager qui attirent notre attention sur un classement des aéroports :
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 flux <- pin_get("mapathon_flux") 
@@ -34,7 +38,7 @@ flux_bidir <-bind_rows(flux ,
 top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Cumul des dessertes` = sum(Dessertes), `Cumul des passagers` = sum(Pax_Total)) %>% slice_max(`Cumul des dessertes`,n=15) %>% 
   mutate(Origine = factor(Origine) %>% fct_reorder(`Cumul des dessertes`)) %>% 
   pivot_longer(c(`Cumul des dessertes`,`Cumul des passagers`)) 
-ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 des aéroports sur la base de leurs flux en 2019, source gflowviz/DGAC.csv")+xlab("Quantité (millions)")
+ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 villes sur la base de leurs flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Quantité (millions)")+ylab(NULL)
 ```
 
 Au delà de la suprématie des aéroports de Paris, il semble intéressant alors de regrouper les flux des 4 premiers aéroports régionaux, séparés du reste des flux métropolitains:
@@ -52,7 +56,7 @@ flux_19 <- flux_bidir %>% filter(Annee=="2019")%>%
          pax_total_cut = cut_number(Pax_Total,n=10) %>% as.numeric,
          desserte_cut = cut_number(Dessertes,n=5) %>% as.numeric,
          pax_per_ac_cut = cut_number(Pax_Total / Dessertes, n=3),
-         info = paste0("<b>", Origine, " - ",Destination, "</b>")) %>% 
+         info = paste0("<b>", Origine, " <-> ",Destination, "</b>,<p> ",Dessertes*2, " dessertes, ", round(Pax_Total/500), " passagers (milliers)</p>")) %>% 
   select(matches("Origine|Destination|_cut"), info)
 
 flux_19_paris <- flux_19 %>% filter(Origine =="PARIS"| Destination=="PARIS")
