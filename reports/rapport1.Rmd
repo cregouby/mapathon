@@ -43,6 +43,9 @@ Au delà de la suprématie des aéroports de Paris, il semble intéressant alors
 
 On prend l'hypothèse que les flux de passagers sont symétriques, i.e. que les billets de passagers sont très majoritairement des aller-retours, pour cartographier les flux sur des lignes inter-villes:  
 
+## Paris
+
+Les flux des seuls aéroports de **Paris** *(utiliser la souris pour zoomer)*  
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 flux_19 <- flux_bidir %>% filter(Annee=="2019")%>%
   mutate(scaled_pax_total = scale(log_pax_total/max(log_pax_total, na.rm = T))*5,
@@ -78,6 +81,10 @@ mapdeck(min_zoom = 10, width=800, height=800, style = mapdeck_style("dark"), zoo
 ```
 
 On réalise que Paris ne dessert en étoile que des villes qui lui sont plus méridionales : on imagine facilement que le trafic vers le nord est capturé par les trains à grande vitesse et par les liaisons aériennes internationales des capitales proches (Londres, Bruxelles, Amsterdam, ...).  
+
+## Lyon - Marseille - Nice - Toulouse
+
+Ou les **4 fantastiques** :  
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 ## Lyon-Marseille-Nie-Toulouse
 animation_speed = median(flux_19_region$desserte_cut)
@@ -97,7 +104,11 @@ mapdeck(min_zoom = 10, width=800, height=800, style = mapdeck_style("dark"), zoo
   )
 ```
 
-Le quatuor d'aéroports régionaux Lyon-Marseille-Nice-Toulouse qui cumulent ensemble un nombre de mouvements d'avion équivalent à Paris, dessinent une carte des flux majoritairement orientée Nord-Ouest . On s'étonne ici de la forme globale très différente de celle de Paris, car aucune typologie d'étoile n'émerge
+Le quatuor d'aéroports régionaux Lyon-Marseille-Nice-Toulouse qui cumulent ensemble un nombre de mouvements d'avion équivalent à Paris, dessinent une carte des flux majoritairement orientée Nord-Ouest . On s'étonne ici de la forme globale très différente de celle de Paris, car aucune typologie d'étoile n'émerge.
+
+## Les liaisons entre les autres aéroports
+
+
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 #### Region
 animation_speed = median(flux_19_region$desserte_cut)
