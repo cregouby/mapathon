@@ -11,6 +11,8 @@ library(tidyverse)
 library(lubridate)
 library(here)
 library(skimr)
+library(pins)
+library(plotluck)
 ```
 
 ## EDA Eurostat
@@ -23,6 +25,7 @@ eurostat <- read_csv(here("data/external/Eurostats_long.csv")) %>%
   select(ville, date, ac_tot=ACM, ac_commercial=CACM, fret_tot=FRM_LD_NLD, pax_tot=PAS_CRD, pax_transit=PAS_TRF, pax_transfert=PAS_TRS) 
 
 skim(eurostat)
+plotluck(eurostat, pax_tot ~.)
 ```
 
 ## Eurostat Plots
@@ -49,16 +52,31 @@ ggplot(eurostat_norm_each %>% filter(!ville=="PARIS") %>%  group_by(ville) , aes
   theme(legend.position = "none") +
   labs("evolution des grandeurs", sub = "normalisé à 1: le premier mois pour chaque ville")
 
+eurostat %>% 
+  pivot_longer(c("ac_tot", "ac_commercial","fret_tot", "pax_tot", "pax_transit", "pax_transfert")) %>% 
+  group_by(name) %>% pin("mapathon_eurostat_long")
+pin(eurostat_norm, "mapathon_eurostat_norm")
+pin(eurostat_norm_each, "mapathon_eurostat_norm_each")
+
 ```
 # DGAC Flux
 ```{r}
 # provides a better precision
 villes <- read_csv(here("data/external/villes.csv"))
+pin(villes, "mapathon_villes")
 
 dgac <- read_csv(here("data/external/DGAC_flux.csv")) %>% 
   mutate(start = ymd(str_c(Annee,"-01-01")) ,
          stop = ymd(str_c(Annee+1,"-01-01"))-1,
-         interval = interval(start, stop )) %>% 
-    select(-Annee, -start, -stop)
+         interval = interval(start, stop ), 
+         log_desserte = log10(Dessertes),
+         log_pax_total = log10(Pax_Total)) #%>% 
+    # select(-Annee, -start, -stop)
+skim(dgac)
+pin(dgac, "mapathon_flux")
+```
+
+```{r}
+plotluck(dgac, Pax_Total ~ .)
 ```
 

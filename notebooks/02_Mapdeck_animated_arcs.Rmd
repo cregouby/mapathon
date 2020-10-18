@@ -1,0 +1,142 @@
+---
+title: "mapdeck plot"
+author: "C.R."
+date: "07/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(skimr)
+library(mapdeck)
+library(pins)
+```
+
+## 
+## Eurostat deckgl
+
+
+```{r pressure, echo=FALSE, message=FALSE, warning=FALSE}
+flux <- pin_get("mapathon_flux") 
+flux_mesures <- names(flux) %>% str_subset("^(P|Desse|F)")
+flux_bidir <-bind_rows(flux , 
+                       flux%>%
+                            rename(O=Destination, lat_O=lat_Destination, lng_O=lng_Destination, Destination=Origine, lat_Destination=lat_Origine, lng_Destination=lng_Origine) %>%
+                            rename(Origine=O, lat_Origine=lat_O, lng_Origine = lng_O)) %>% 
+  mutate_at(flux_mesures, ~./2)
+flux_19 <- flux_bidir %>% filter(Annee=="2019")%>%
+  mutate(log_pax_total = log_pax_total/max(log_pax_total, na.rm = T)*10,
+         desserte = scale(log(Dessertes)),
+         desserte_scaled = (desserte -min(desserte))*2+0.5,
+         pax_per_ac = scale(Pax_Total / Dessertes),
+         pax_per_ac_scaled =( pax_per_ac-min(pax_per_ac))*3+1,
+         info = paste0("<b>", Origine, " - ",Destination, "</b>")) %>% 
+  select(matches("Origine|Destination"),log_pax_total, desserte_scaled, pax_per_ac_scaled, info)
+# mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>%
+#   add_animated_arc(data=flux_19,
+#           layer_id = "arc_layer",
+#           origin = c("lng_Origine", "lat_Origine"),
+#   destination = c("lng_Destination", "lat_Destination"),
+#   stroke_from = "Origine",
+#   stroke_to = "Destination",
+#   stroke_width = "desserte_scaled",
+#   height = "log_pax_total",
+#   trail_length = 10,
+#   tooltip = "info",
+#   auto_highlight = TRUE
+#   )
+
+```
+## Small_multiple we separate the major hubs 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+flux_19_paris <- flux_19 %>% filter(Origine =="PARIS"| Destination=="PARIS")
+flux_19_region <- flux_19 %>% filter(Origine !="PARIS", Destination!="PARIS")
+flux_19_lyon <- flux_19_region %>% filter(Origine =="LYON" | Destination=="LYON")
+flux_19_lmnt <- flux_19_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) )
+flux_19_region <- flux_19_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ))
+
+mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
+  add_animated_arc(data=flux_19_region, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "log_pax_total",
+                   height = 0.15,
+                   animation_speed = 2, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
+  add_animated_arc(data=flux_19_paris, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "log_pax_total",
+                   height = 0.15,
+                   animation_speed = 8, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
+  add_animated_arc(data=flux_19_lmnt, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "log_pax_total",
+                   height = 0.15,
+                   animation_speed = 4, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+```
+
+## Multi-speed anmation
+stacking add_animated_arc does not work...
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+qtles <- quantile(flux_19_paris$desserte_scaled)
+flux_19_paris_sp1 <- flux_19_paris %>% filter(desserte_scaled < qtles[2])
+flux_19_paris_sp2 <- flux_19_paris %>% filter(desserte_scaled >= qtles[2], desserte_scaled < qtles[3])
+flux_19_paris_sp3 <- flux_19_paris %>% filter(desserte_scaled >= qtles[3], desserte_scaled < qtles[4])
+flux_19_paris_sp4 <- flux_19_paris %>% filter(desserte_scaled >= qtles[4])
+mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
+  add_animated_arc(data=flux_19_paris_sp1, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "pax_per_ac",
+                   height = "log_pax_total",
+                   animation_speed = 2, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )%>% 
+  add_animated_arc(data=flux_19_paris_sp4, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "pax_per_ac",
+                   height = "log_pax_total",
+                   animation_speed = 8, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+
+```
+

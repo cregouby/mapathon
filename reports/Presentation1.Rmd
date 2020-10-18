@@ -1,0 +1,132 @@
+---
+title: "Cartomob Mapathon 2020"
+subtitle: "Tous (im)mobiles, tous cartographes ?"
+author: "Christophe Regouby"
+date: "2020/10/18 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    seal: false
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+class: inverse, middle
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(skimr)
+library(mapdeck)
+library(pins)
+```
+
+
+# Introduction 
+Le jeu de données proposé pour le **mapathon 2020 de Cartomob** regroupe un jeu de donnée des flux de transport aéronautique en France métropolitaine, échantillonné sur 5 années clef entre 1999 et 2019, et une série temporelle de donnée de comptage de ces flux aéronautiques par ville et par mois entre 2010 et 2020. Nous avons choisi de nous concentrer sur l'année 2019, car récente, et présente dans les deux jeux de donnée.
+
+---
+class: inverse
+# Une France Jacobine
+À partir du jeu de donnée des flux de transport aérien en France métropolitaine, nous nous intéressons à l'année 2019: c'est les flux totaux de passager qui attirent notre attention sur un classement des aéroports :
+
+```{r echo=FALSE, fig.height=4, fig.width=8, message=FALSE, warning=FALSE}
+flux <- pin_get("mapathon_flux") 
+flux_mesures <- names(flux) %>% str_subset("^(P|Desse|F)")
+flux_bidir <-bind_rows(flux , 
+                       flux%>%
+                            rename(O=Destination, lat_O=lat_Destination, lng_O=lng_Destination, Destination=Origine, lat_Destination=lat_Origine, lng_Destination=lng_Origine) %>%
+                            rename(Origine=O, lat_Origine=lat_O, lng_Origine = lng_O)) %>% 
+  mutate_at(flux_mesures, ~./2)
+
+top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Cumul des dessertes` = sum(Dessertes), `Cumul des passagers` = sum(Pax_Total)) %>% slice_max(`Cumul des dessertes`,n=15) %>% 
+  mutate(Origine = factor(Origine) %>% fct_reorder(`Cumul des dessertes`)) %>% 
+  pivot_longer(c(`Cumul des dessertes`,`Cumul des passagers`)) 
+ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 des aéroports sur la base de leurs flux en 2019, source gflowviz/DGAC.csv")+xlab("Quantité (millions)")
+```
+
+Au delà de la suprématie des aéroports de Paris, il semble intéressant alors de regrouper les flux des 4 premiers aéroports régionaux, séparés du reste des flux métropolitains.
+
+---
+class: inverse, center, middle
+## Paris
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+flux_19 <- flux_bidir %>% filter(Annee=="2019")%>%
+  mutate(scaled_pax_total = scale(log_pax_total/max(log_pax_total, na.rm = T))*5,
+         pax_total_cut = cut_number(Pax_Total,n=10) %>% as.numeric,
+         desserte_cut = cut_number(Dessertes,n=5) %>% as.numeric,
+         pax_per_ac_cut = cut_number(Pax_Total / Dessertes, n=3),
+         info = paste0("<b>", Origine, " - ",Destination, "</b>")) %>% 
+  select(matches("Origine|Destination|_cut"), info)
+
+flux_19_paris <- flux_19 %>% filter(Origine =="PARIS"| Destination=="PARIS")
+flux_19_region <- flux_19 %>% filter(Origine !="PARIS", Destination!="PARIS")
+flux_19_lyon <- flux_19_region %>% filter(Origine =="LYON" | Destination=="LYON")
+flux_19_lmnt <- flux_19_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) )
+flux_19_region <- flux_19_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ))
+### Paris
+mapdeck(min_zoom = 8.5, max_zoom=12.5, width=800, height=800, style = mapdeck_style("dark"), zoom = 8.5) %>% 
+  add_animated_arc(data=flux_19_paris, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "pax_total_cut",
+                   height = 0.15,
+                   animation_speed = 3, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+```
+
+---
+class: inverse, center, middle
+## Lyon-Marseille-Nie-Toulouse
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## Lyon-Marseille-Nie-Toulouse
+mapdeck(min_zoom = 8.5, max_zoom=12.5, width=800, height=800, style = mapdeck_style("dark"), zoom = 8.5) %>% 
+  add_animated_arc(data=flux_19_lmnt, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "pax_total_cut",
+                   height = 0.15,
+                   animation_speed = 2, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+```
+
+---
+class: inverse, center, middle
+## Autres villes
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#### Region
+mapdeck(min_zoom = 8.5, max_zoom=12.5, width=800, height=800, style = mapdeck_style("dark"), zoom = 8.5) %>% 
+  add_animated_arc(data=flux_19_region, 
+                   layer_id = "arc_layer",
+                   origin = c("lng_Origine", "lat_Origine"),
+                   destination = c("lng_Destination", "lat_Destination"),
+                   stroke_from = "Origine",
+                   stroke_to = "Destination",
+                   stroke_width = "pax_total_cut",
+                   height = 0.15,
+                   animation_speed = 1, 
+                   trail_length = 10,
+                   tooltip = "info",
+                   auto_highlight = TRUE
+  )
+# {"width":800,"height":800,"latitude":42.74501692626584,"longitude":3.3660180772866637,"zoom":4.486958848949292,"bearing":0,"pitch":0,"altitude":1.5,"maxZoom":20,"minZoom":0,"maxPitch":60,"minPitch":0,"viewId":"htmlwidget-021fe0742bc41b2a1042","viewBounds":{"north":51.27151704433172,"east":15.908495509645219,"south":32.86213386433999,"west":-9.176459355071712},"interactionState":{"isDragging":false,"isPanning":false,"isRotating":false}}
+
+
+```
+
