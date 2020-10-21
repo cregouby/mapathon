@@ -1,7 +1,7 @@
 mapathon
 ==============================
 
-A short description of the project.
+Trying to win the Toulouse Cartomap Mapathon with https://cregouby.github.io/mapathon/reports/rapport1.html
 
 Project Organization
 ------------
