@@ -1,0 +1,147 @@
+---
+title: "Cartomob Mapathon 2020"
+subtitle: "Tous (im)mobiles, tous cartographes ?"
+author: "Christophe Regouby"
+date: "07/10/2020"
+output: 
+  html_document:
+    theme: darkly
+    highlight: default
+    css: styles.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, out.width = 1200)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(skimr)
+library(mapdeck)
+library(pins)
+
+pretty_num <- function (i, sep = "\xC2\xA0", locale=locale()) {
+    n <- floor(log(i, 1000))
+    n <- ifelse(n>7, 7, n)
+    n <- ifelse(n< -4, -4, n)
+    paste0(round(i/(1000^n), 2), sep, c("p","n","μ","m","", "k", "M", "G", "T", "P", "H", "Z")[n+5])
+}
+
+```
+
+# Introduction 
+Le jeu de données proposé pour le  **mapathon 2020 de Cartomob** regroupe un jeu de donnée des flux de transport aéronautique en France métropolitaine, échantillonné sur 5 années clef entre 1999 et 2019, et une série temporelle de donnée de comptage de ces flux aéronautiques par ville et par mois entre 2010 et 2020. Nous avons choisi de nous concentrer sur l'année 2019, car récente, et présente dans les deux jeux de donnée.
+
+# Une France Jacobine
+
+À partir du jeu de donnée des flux de transport aérien en France métropolitaine, nous nous intéressons donc à l'année 2019 uniquement: c'est les flux totaux de passager qui attirent notre attention sur un classement des aéroports :
+
+```{r }
+flux <- pin_get("mapathon_flux") 
+flux_mesures <- names(flux) %>% str_subset("^(P|Desse|F)")
+flux_bidir <-bind_rows(flux , 
+                       flux%>%
+                            rename(O=Destination, lat_O=lat_Destination, lng_O=lng_Destination, Destination=Origine, lat_Destination=lat_Origine, lng_Destination=lng_Origine) %>%
+                            rename(Origine=O, lat_Origine=lat_O, lng_Origine = lng_O)) %>% 
+  mutate_at(flux_mesures, ~./2)
+
+top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Cumul des dessertes` = sum(Dessertes), `Cumul des passagers` = sum(Pax_Total)) %>% slice_max(`Cumul des dessertes`,n=15) %>% 
+  mutate(Origine = factor(Origine) %>% fct_reorder(`Cumul des dessertes`)) %>% 
+  pivot_longer(c(`Cumul des dessertes`,`Cumul des passagers`)) 
+ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 villes sur la base de leurs flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Quantité (millions)")+ylab(NULL)
+```
+
+Au delà de la suprématie des aéroports de Paris, il semble intéressant alors de regrouper les flux des 4 premiers aéroports régionaux, séparés du reste des flux métropolitains.   
+En effet, les trois groupes ainsi formés ( Paris, Lyon-Marseille-Nice-Toulouse, et autres villes) sont alors de taille comparable en terme de   
+* nombre de dessertes (471k, 491k, 624k respectivement)  
+* nombre de passagers transportés au total (43M, 37M, 39M respectivement)
+
+# Des flux très hétérogènes
+
+On prend l'hypothèse que les flux de passagers sont symétriques, i.e. que les billets de passagers sont très majoritairement des aller-retours, pour cartographier les flux sur des lignes inter-villes:  
+
+## Paris
+
+Les flux des seuls aéroports de **Paris** *(utiliser la souris pour zoomer et centrer)*  
+```{r }
+flux_gg <- flux_bidir %>% # filter(Annee%in%c("2019", "2009", "1999")) %>%
+  mutate(#scaled_pax_total = scale(log_pax_total/max(log_pax_total, na.rm = T))*5,
+         pax_total_cut = cut_number(Pax_Total,n=10) %>% as.numeric,
+         desserte_cut = cut_number(Dessertes,n=5) %>% as.numeric,
+         pax_per_ac_cut = cut_number(Pax_Total / Dessertes, n=3),
+         info = paste0("<b>", Origine, " <-> ",Destination, "</b>,<p> ",Dessertes*2, " dessertes, ", pretty_num(Pax_Total*2), " passagers</p>")) %>% 
+  group_by(Annee) %>% 
+  select(matches("Origine|Destination|_cut"), info)
+
+flux_paris <- flux_gg %>% filter(Origine =="PARIS"| Destination=="PARIS") 
+flux_region <- flux_gg %>% filter(Origine !="PARIS", Destination!="PARIS")
+flux_lyon <- flux_region %>% filter(Origine =="LYON" | Destination=="LYON")
+flux_lmnt <- flux_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) ) 
+flux_region <- flux_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" )) 
+### Paris
+mapdeck_flux <- function(flux_df, speed, width=350, height=350) {
+      mapdeck(min_zoom = 10, width=width, height=height, style = mapdeck_style("dark"), zoom = 12) %>% 
+      # add_scatterplot(villes, lon = "lng", lat = "lat") %>% 
+      add_animated_arc(data=flux_df, 
+                       layer_id = "arc_layer",
+                       origin = c("lng_Origine", "lat_Origine"),
+                       destination = c("lng_Destination", "lat_Destination"),
+                       stroke_from = "Origine",
+                       stroke_to = "Destination",
+                       stroke_width = "pax_total_cut",
+                       height = 0.15,
+                       animation_speed = speed, 
+                       trail_length = 10,
+                       tooltip = "info",
+                       auto_highlight = TRUE
+      )
+}
+animation_speed = flux_paris  %>% summarise(speed=median(desserte_cut))
+flux_paris <- flux_paris %>% left_join(animation_speed)
+paris <- group_map(flux_paris, ~mapdeck_flux(.x, speed = first(.x$speed)))
+## Lyon-Marseille-Nie-Toulouse
+animation_speed = flux_lmnt  %>% summarise(speed=median(desserte_cut))
+flux_lmnt <- flux_lmnt %>% left_join(animation_speed)
+lmnt <- group_map(flux_lmnt, ~mapdeck_flux(.x, speed = first(.x$speed)))
+#### Region
+animation_speed = flux_region  %>% summarise(speed=median(desserte_cut))
+flux_region <- flux_region %>% left_join(animation_speed)
+region <- group_map(flux_region, ~mapdeck_flux(.x, speed = first(.x$speed)))
+Annee <- group_data(flux_gg)$Annee
+
+mapdeck_flux(flux_paris %>% ungroup %>% filter(Annee=="2019"), speed = 5, width = 800, height = 800)
+```
+
+On réalise que Paris ne dessert en étoile que des villes qui lui sont plus méridionales : on imagine facilement que le trafic vers le nord est capturé par les trains à grande vitesse et par les liaisons aériennes internationales des capitales proches (Londres, Bruxelles, Amsterdam, ...).  
+
+## Lyon - Marseille - Nice - Toulouse
+
+Ou les **4 fantastiques** :  
+
+```{r}
+mapdeck_flux(flux_lmnt %>% ungroup %>% filter(Annee=="2019"), speed = 3, width = 800, height = 800)
+```
+Le quatuor d'aéroports régionaux Lyon-Marseille-Nice-Toulouse qui cumulent ensemble un nombre de mouvements d'avion équivalent à Paris, dessinent une carte des flux majoritairement orientée Nord-Ouest . On s'étonne ici de la forme globale très différente de celle de Paris, car aucune typologie d'étoile n'émerge.
+
+## Les liaisons entre les autres aéroports
+
+```{r}
+mapdeck_flux(flux_region %>% ungroup %>% filter(Annee=="2019"), speed = 1, width = 800, height = 800)
+```
+
+Pour les autres liaisons inter-régionales,une fois encore l'orientation Ouest-Nord-Ouest prédomine. Au delà de la forme générale reproduisant les frontières de l'hexagone, on constate que l'extrême Sud-Ouest est peu desservi. Les liaisons orientées Nord-Est sont accaparées par le train à grande vitesse, ou des lignes internationales vers les pays voisins (Suisse, Allemagne, Belgique, Hollande, Angleterre...)
+
+
+# L'évolution historique
+
+Lorsqu'on utilise ces mêmes cartes de flux et qu'on les compare au cours du temps, des évolutions interessantes aparaisent:
+
+<div id="large_table">
+| Ville | `r Annee[[1]]`|`r Annee[[2]]`|`r Annee[[3]]`|`r Annee[[4]]`|`r Annee[[5]]`|
+|---| :-: | :-: | :-: | :-: | :-: |
+|<br /><br /><br /><br />Paris|`r paris[[1]]`  | `r paris[[2]]`  | `r paris[[3]]`  |`r paris[[4]]`  |`r paris[[5]]`  |
+|<br /><br /><br /><br />Lyon-Marseille-Nice-Toulouse|`r lmnt[[1]]`   | `r lmnt[[2]]`   | `r lmnt[[3]]`   |`r lmnt[[4]]`   | `r lmnt[[5]]`   |
+|<br /><br /><br /><br />Autres villes|`r region[[1]]` | `r region[[2]]` | `r region[[3]]` |`r region[[4]]` | `r region[[5]]` |
+
+</div>
+
+
