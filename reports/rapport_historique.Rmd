@@ -23,7 +23,9 @@ pretty_num <- function (i, sep = "\xC2\xA0", locale=locale()) {
     n <- floor(log(i, 1000))
     n <- ifelse(n>7, 7, n)
     n <- ifelse(n< -4, -4, n)
-    paste0(round(i/(1000^n), 2), sep, c("p","n","μ","m","", "k", "M", "G", "T", "P", "H", "Z")[n+5])
+    amount <- i/(1000^n)
+    digits <- 3 - str_length(floor(amount))
+    paste0(round(amount, digits), sep, c("p","n","μ","m","", "k", "M", "G", "T", "P", "H", "Z")[n+5])
 }
 
 ```
@@ -68,7 +70,7 @@ flux_gg <- flux_bidir %>% # filter(Annee%in%c("2019", "2009", "1999")) %>%
          pax_total_cut = cut_number(Pax_Total,n=10) %>% as.numeric,
          desserte_cut = cut_number(Dessertes,n=5) %>% as.numeric,
          pax_per_ac_cut = cut_number(Pax_Total / Dessertes, n=3),
-         info = paste0("<b>", Origine, " <-> ",Destination, "</b>,<p> ",Dessertes*2, " dessertes, ", pretty_num(Pax_Total*2), " passagers</p>")) %>% 
+         info = paste0("<b>", Origine, " <-> ",Destination, "</b>,<p> ",pretty_num(Dessertes*2), " dessertes, ", pretty_num(Pax_Total*2), " passagers</p>")) %>% 
   group_by(Annee) %>% 
   select(matches("Origine|Destination|_cut"), info)
 
@@ -136,12 +138,25 @@ Pour les autres liaisons inter-régionales,une fois encore l'orientation Ouest-N
 Lorsqu'on utilise ces mêmes cartes de flux et qu'on les compare au cours du temps, des évolutions interessantes aparaisent:
 
 <div id="large_table">
-| Ville | `r Annee[[1]]`|`r Annee[[2]]`|`r Annee[[3]]`|`r Annee[[4]]`|`r Annee[[5]]`|
+| Ville |  `r Annee[[1]]` | `r Annee[[2]]` | `r Annee[[3]] `| `r Annee[[4]]` | `r Annee[[5]]` |
 |---| :-: | :-: | :-: | :-: | :-: |
 |<br /><br /><br /><br />Paris|`r paris[[1]]`  | `r paris[[2]]`  | `r paris[[3]]`  |`r paris[[4]]`  |`r paris[[5]]`  |
 |<br /><br /><br /><br />Lyon-Marseille-Nice-Toulouse|`r lmnt[[1]]`   | `r lmnt[[2]]`   | `r lmnt[[3]]`   |`r lmnt[[4]]`   | `r lmnt[[5]]`   |
 |<br /><br /><br /><br />Autres villes|`r region[[1]]` | `r region[[2]]` | `r region[[3]]` |`r region[[4]]` | `r region[[5]]` |
 
 </div>
+
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Paris
+
+On voit en zoomant que Paris perd des lignes au profit du TGV, lors d'une première vague dans l'Ouest et le Sud-Ouest ( fermeture de Lannion, assèchement de Rennes,  Cherbourg, Bordeaux ) et lors d'une deuxième vague dans l'Est (fermeture de Strasbourg, Nancy et Epinal, assèchement de Mulhouse)
+
+## Lyon Marseille Nice Toulouse 
+
+On constate ici le partage des rôles de hubs regionaux par la transformation de la forme de pointe ( une seule liaison vers un hub unique ) a une forme de branche d'etoile (liaisons multiples vers les 4 villes), alors que Lyon, historiquement, concentrait ce role a lui seul en 1999.  Ainsi progressivement, les villes peripheriques de cette etoile ouvrent des liaisons vers les autres villes du quatuor : Brest devient ainsi une branche d'etoile en 2004, Caen en 2019, et dans une moindre mesure, les Aeroports de Corse, Pau, ...
+
 
 
