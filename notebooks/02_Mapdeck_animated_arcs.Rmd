@@ -11,8 +11,17 @@ library(tidyverse)
 library(lubridate)
 library(here)
 library(skimr)
-library(mapdeck)
+library(mapdeck) # github version
 library(pins)
+pretty_num <- function (i, sep = "\xC2\xA0", locale=locale()) {
+    n <- floor(log(i, 1000))
+    n <- ifelse(n>7, 7, n)
+    n <- ifelse(n< -4, -4, n)
+    amount <- i/(1000^n)
+    digits <- 3 - str_length(floor(amount))
+    paste0(round(amount, digits), sep, c("p","n","μ","m","", "k", "M", "G", "T", "P", "H", "Z")[n+5])
+}
+
 ```
 
 ## 
@@ -27,40 +36,89 @@ flux_bidir <-bind_rows(flux ,
                             rename(O=Destination, lat_O=lat_Destination, lng_O=lng_Destination, Destination=Origine, lat_Destination=lat_Origine, lng_Destination=lng_Origine) %>%
                             rename(Origine=O, lat_Origine=lat_O, lng_Origine = lng_O)) %>% 
   mutate_at(flux_mesures, ~./2)
-flux_19 <- flux_bidir %>% filter(Annee=="2019")%>%
-  mutate(log_pax_total = log_pax_total/max(log_pax_total, na.rm = T)*10,
-         desserte = scale(log(Dessertes)),
-         desserte_scaled = (desserte -min(desserte))*2+0.5,
-         pax_per_ac = scale(Pax_Total / Dessertes),
-         pax_per_ac_scaled =( pax_per_ac-min(pax_per_ac))*3+1,
-         info = paste0("<b>", Origine, " - ",Destination, "</b>")) %>% 
-  select(matches("Origine|Destination"),log_pax_total, desserte_scaled, pax_per_ac_scaled, info)
-# mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>%
-#   add_animated_arc(data=flux_19,
-#           layer_id = "arc_layer",
-#           origin = c("lng_Origine", "lat_Origine"),
-#   destination = c("lng_Destination", "lat_Destination"),
-#   stroke_from = "Origine",
-#   stroke_to = "Destination",
-#   stroke_width = "desserte_scaled",
-#   height = "log_pax_total",
-#   trail_length = 10,
-#   tooltip = "info",
-#   auto_highlight = TRUE
-#   )
+flux_gg <- flux_bidir %>% # filter(Annee%in%c("2019", "2009", "1999")) %>%
+  mutate(#scaled_pax_total = scale(log_pax_total/max(log_pax_total, na.rm = T))*5,
+         pax_total_cut = cut_number(Pax_Total,n=10) %>% as.numeric,
+         desserte_cut = cut_number(Dessertes,n=5) %>% as.numeric,
+         pax_per_ac_cut = cut_number(Pax_Total / Dessertes, n=3),
+         info = paste0("<b>", Origine, " <-> ",Destination, "</b>,<p> ",pretty_num(Dessertes*2), " dessertes, ", pretty_num(Pax_Total*2), " passagers</p>")) %>% 
+  group_by(Annee) %>% 
+  select(matches("Origine|Destination|_cut"), info)
+
+flux_paris <- flux_gg %>% filter(Origine =="PARIS"| Destination=="PARIS") 
+flux_region <- flux_gg %>% filter(Origine !="PARIS", Destination!="PARIS")
+flux_lyon <- flux_region %>% filter(Origine =="LYON" | Destination=="LYON")
+flux_lmnt <- flux_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) ) 
+flux_region <- flux_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" )) 
+### mono-speed function
+mapdeck_flux <- function(flux_df, speed, width=350, height=350) {
+      mapdeck(min_zoom = 10, width=width, height=height, style = mapdeck_style("dark"), zoom = 12, show_view_state = TRUE) %>% 
+      # add_scatterplot(villes, lon = "lng", lat = "lat") %>% 
+      add_animated_arc(data=flux_df, 
+                       origin = c("lng_Origine", "lat_Origine"),
+                       destination = c("lng_Destination", "lat_Destination"),
+                       stroke_from = "Origine",
+                       stroke_to = "Destination",
+                       stroke_width = "pax_total_cut",
+                       height = 0.15,
+                       animation_speed = speed, 
+                       trail_length = 10,
+                       tooltip = "info",
+                       auto_highlight = TRUE
+      )
+}
+### multi-speed function
+mapdeck_flux_3 <- function(flux_df, width=350, height=350) {
+  speed <- unique(flux_df$desserte_cut)
+  mapdeck(min_zoom = 10, width=width, height=height, style = mapdeck_style("dark"), zoom = 12, show_view_state = TRUE) %>% 
+    # add_scatterplot(villes, lon = "lng", lat = "lat") %>% 
+    add_animated_arc(data=flux_df %>% filter(desserte_cut==min(speed)), 
+                     layer_id = "speed_min",
+                     origin = c("lng_Origine", "lat_Origine"),
+                     destination = c("lng_Destination", "lat_Destination"),
+                     stroke_from = "Origine",
+                     stroke_to = "Destination",
+                     stroke_width = "pax_total_cut",
+                     height = 0.15,
+                     animation_speed = min(speed), 
+                     trail_length = 10,
+                     tooltip = "info",
+                     auto_highlight = TRUE
+    ) %>% 
+    add_animated_arc(data=flux_df %>% filter(desserte_cut>min(speed), desserte_cut<max(speed)), 
+                     layer_id = "speed_med",
+                     origin = c("lng_Origine", "lat_Origine"),
+                     destination = c("lng_Destination", "lat_Destination"),
+                     stroke_from = "Origine",
+                     stroke_to = "Destination",
+                     stroke_width = "pax_total_cut",
+                     height = 0.15,
+                     animation_speed = median(speed), 
+                     trail_length = 10,
+                     tooltip = "info",
+                     auto_highlight = TRUE
+    ) %>% 
+    add_animated_arc(data=flux_df %>% filter(desserte_cut==max(speed)), 
+                     layer_id = "speed_max",
+                     origin = c("lng_Origine", "lat_Origine"),
+                     destination = c("lng_Destination", "lat_Destination"),
+                     stroke_from = "Origine",
+                     stroke_to = "Destination",
+                     stroke_width = "pax_total_cut",
+                     height = 0.15,
+                     animation_speed = max(speed), 
+                     trail_length = 10,
+                     tooltip = "info",
+                     auto_highlight = TRUE
+    )  
+}
 
 ```
+
 ## Small_multiple we separate the major hubs 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-flux_19_paris <- flux_19 %>% filter(Origine =="PARIS"| Destination=="PARIS")
-flux_19_region <- flux_19 %>% filter(Origine !="PARIS", Destination!="PARIS")
-flux_19_lyon <- flux_19_region %>% filter(Origine =="LYON" | Destination=="LYON")
-flux_19_lmnt <- flux_19_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) )
-flux_19_region <- flux_19_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ))
-
-mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
-  add_animated_arc(data=flux_19_region, 
-                   layer_id = "arc_layer",
+mapdeck(data=flux_region, min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
+  add_animated_arc(data=flux_region, 
                    origin = c("lng_Origine", "lat_Origine"),
                    destination = c("lng_Destination", "lat_Destination"),
                    stroke_from = "Origine",
@@ -73,8 +131,7 @@ mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_sty
                    auto_highlight = TRUE
   )
 mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
-  add_animated_arc(data=flux_19_paris, 
-                   layer_id = "arc_layer",
+  add_animated_arc(data=flux_region, 
                    origin = c("lng_Origine", "lat_Origine"),
                    destination = c("lng_Destination", "lat_Destination"),
                    stroke_from = "Origine",
@@ -87,8 +144,7 @@ mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_sty
                    auto_highlight = TRUE
   )
 mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
-  add_animated_arc(data=flux_19_lmnt, 
-                   layer_id = "arc_layer",
+  add_animated_arc(data=flux_region, 
                    origin = c("lng_Origine", "lat_Origine"),
                    destination = c("lng_Destination", "lat_Destination"),
                    stroke_from = "Origine",
@@ -103,16 +159,16 @@ mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_sty
 ```
 
 ## Multi-speed anmation
-stacking add_animated_arc does not work...
+stacking add_animated_arc does not work, only last animated_arc is shown...
 ```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-qtles <- quantile(flux_19_paris$desserte_scaled)
-flux_19_paris_sp1 <- flux_19_paris %>% filter(desserte_scaled < qtles[2])
-flux_19_paris_sp2 <- flux_19_paris %>% filter(desserte_scaled >= qtles[2], desserte_scaled < qtles[3])
-flux_19_paris_sp3 <- flux_19_paris %>% filter(desserte_scaled >= qtles[3], desserte_scaled < qtles[4])
-flux_19_paris_sp4 <- flux_19_paris %>% filter(desserte_scaled >= qtles[4])
+qtles <- quantile(flux_paris$desserte_scaled)
+flux_19_paris_sp1 <- flux_paris %>% filter(desserte_scaled < qtles[2])
+flux_19_paris_sp2 <- flux_paris %>% filter(desserte_scaled >= qtles[2], desserte_scaled < qtles[3])
+flux_19_paris_sp3 <- flux_paris %>% filter(desserte_scaled >= qtles[3], desserte_scaled < qtles[4])
+flux_19_paris_sp4 <- flux_paris %>% filter(desserte_scaled >= qtles[4])
 mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_style("dark"), pitch = 45) %>% 
-  add_animated_arc(data=flux_19_paris_sp1, 
-                   layer_id = "arc_layer",
+  add_animated_arc(data=flux_paris_sp1, 
+                   layer_id = "arc_layer1",
                    origin = c("lng_Origine", "lat_Origine"),
                    destination = c("lng_Destination", "lat_Destination"),
                    stroke_from = "Origine",
@@ -124,8 +180,8 @@ mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_sty
                    tooltip = "info",
                    auto_highlight = TRUE
   )%>% 
-  add_animated_arc(data=flux_19_paris_sp4, 
-                   layer_id = "arc_layer",
+  add_animated_arc(data=flux_paris_sp4, 
+                   layer_id = "arc_layer2",
                    origin = c("lng_Origine", "lat_Origine"),
                    destination = c("lng_Destination", "lat_Destination"),
                    stroke_from = "Origine",
@@ -138,5 +194,10 @@ mapdeck(min_zoom = 4.5, max_zoom=6.5, width=800, height=800, style = mapdeck_sty
                    auto_highlight = TRUE
   )
 
+```
+
+```{r}
+mapdeck_flux_3(flux_df = flux_paris %>% ungroup %>% filter(Annee=="2019"))
+#{"width":350,"height":350,"latitude":46.32175792765477,"longitude":2.406704859626679,"zoom":4.027074247285214,"bearing":0,"pitch":0,"altitude":1.5,"maxZoom":20,"minZoom":0,"maxPitch":60,"minPitch":0,"viewId":"htmlwidget-2e6ed77d5db95706fd95","viewBounds":{"north":51.28712378792371,"east":9.95415834697271,"south":40.86115280011853,"west":-5.140748627719684},"interactionState":{"isDragging":false,"isPanning":false,"isRotating":false}}
 ```
 
