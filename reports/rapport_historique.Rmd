@@ -82,7 +82,7 @@ flux_region <- flux_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NIC
 ### Paris
 mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
   speed <- unique(flux_df$desserte_cut)
-  mapdeck(min_zoom = 10, width=width, height=height, style = mapdeck_style("dark"), ... ) %>% 
+  mapdeck(min_zoom = 4,  width=width, height=height, style = mapdeck_style("dark"), location = c(2.2089954941016994,45.92548789927358), ... ) %>% 
     # add_scatterplot(villes, lon = "lng", lat = "lat") %>% 
     add_animated_arc(data=flux_df %>% filter(desserte_cut==min(speed)), 
                      layer_id = "speed_min",
@@ -95,7 +95,8 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      animation_speed = min(speed), 
                      trail_length = 10,
                      tooltip = "info",
-                     auto_highlight = TRUE
+                     auto_highlight = TRUE,
+                     update_view = FALSE
     ) %>% 
     add_animated_arc(data=flux_df %>% filter(desserte_cut>min(speed), desserte_cut<max(speed)), 
                      layer_id = "speed_med",
@@ -108,7 +109,8 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      animation_speed = median(speed), 
                      trail_length = 10,
                      tooltip = "info",
-                     auto_highlight = TRUE
+                     auto_highlight = TRUE,
+                     update_view = FALSE
     ) %>% 
     add_animated_arc(data=flux_df %>% filter(desserte_cut==max(speed)), 
                      layer_id = "speed_max",
@@ -121,12 +123,13 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      animation_speed = max(speed), 
                      trail_length = 10,
                      tooltip = "info",
-                     auto_highlight = TRUE
+                     auto_highlight = TRUE,
+                     update_view = FALSE
     )  
 }
 # animation_speed = flux_paris  %>% summarise(speed=median(desserte_cut))
 # flux_paris <- flux_paris %>% left_join(animation_speed)
-paris <- group_map(flux_paris, ~mapdeck_flux(.x, token=NULL))
+paris <- group_map(flux_paris, ~mapdeck_flux(.x, token=NULL, zoom=4))
 ## Lyon-Marseille-Nie-Toulouse
 # animation_speed = flux_lmnt  %>% summarise(speed=median(desserte_cut))
 # flux_lmnt <- flux_lmnt %>% left_join(animation_speed)
@@ -138,8 +141,9 @@ region <- group_map(flux_region, ~mapdeck_flux(.x, token=NULL, zoom=4))
 Annee <- group_data(flux_gg)$Annee
 
 mapdeck_flux(flux_paris %>% ungroup %>% filter(Annee=="2019"), 
-             width = 800, height = 800, zoom=5.2)
+             width = 800, height = 800, zoom=5.22)
 # {"width":800,"height":800,"latitude":45.35984466894242,"longitude":2.2089954941016994,"zoom":5.229432776426513,"bearing":0,"pitch":0,"altitude":1.5,"maxZoom":20,"minZoom":0,"maxPitch":60,"minPitch":0,"viewId":"htmlwidget-2a95731b1c0274468915","viewBounds":{"north":50.38311890801527,"east":9.705803783943043,"south":39.847525676768754,"west":-5.2878127957392875},"interactionState":{"isDragging":false,"isPanning":false,"isRotating":false}}
+#{"width":350,"height":350,"latitude":45.92548789927358,"longitude":2.2085788590803794,"zoom":3.9785800643434595,"bearing":0,"pitch":0,"altitude":1.5,"maxZoom":20,"minZoom":0,"maxPitch":60,"minPitch":0,"viewId":"htmlwidget-1ad3248c363aa8876c52","viewBounds":{"north":51.09049432748492,"east":10.014041491805138,"south":40.230649802461926,"west":-5.596883773644633},"interactionState":{"isDragging":false,"isPanning":false,"isRotating":false}}
 ```
 
 On réalise que Paris ne dessert en étoile que des villes qui lui sont plus méridionales : on imagine facilement que le trafic vers le nord est capturé par les trains à grande vitesse et par les liaisons aériennes internationales des capitales proches (Londres, Bruxelles, Amsterdam, ...).  
@@ -149,14 +153,14 @@ On réalise que Paris ne dessert en étoile que des villes qui lui sont plus mé
 Ou les **4 fantastiques** :  
 
 ```{r}
-mapdeck_flux(flux_lmnt %>% ungroup %>% filter(Annee=="2019"), width = 800, height = 800, zoom=5.2)
+mapdeck_flux(flux_lmnt %>% ungroup %>% filter(Annee=="2019"), width = 800, height = 800, zoom=5.22)
 ```
 Le quatuor d'aéroports régionaux Lyon-Marseille-Nice-Toulouse qui cumulent ensemble un nombre de mouvements d'avion équivalent à Paris, dessinent une carte des flux majoritairement orientée Nord-Ouest . On s'étonne ici de la forme globale très différente de celle de Paris, car aucune topologie d'étoile n'émerge.
 
 ## Les liaisons entre les autres aéroports
 
 ```{r}
-mapdeck_flux(flux_region %>% ungroup %>% filter(Annee=="2019"), width = 800, height = 800, zoom=5.2)
+mapdeck_flux(flux_region %>% ungroup %>% filter(Annee=="2019"), width = 800, height = 800, zoom=5.22)
 ```
 
 Pour les autres liaisons inter-régionales,une fois encore l'orientation Ouest-Nord-Ouest prédomine. Au delà de la forme générale reproduisant les frontières de l'hexagone, on constate que l'extrême Sud-Ouest est peu desservi. Les liaisons orientées Nord-Est sont accaparées par le train à grande vitesse, ou des lignes internationales vers les pays voisins (Suisse, Allemagne, Belgique, Hollande, Angleterre...)
