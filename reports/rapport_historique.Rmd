@@ -49,13 +49,13 @@ flux_bidir <-bind_rows(flux ,
 top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Cumul des dessertes` = sum(Dessertes), `Cumul des passagers` = sum(Pax_Total)) %>% slice_max(`Cumul des dessertes`,n=15) %>% 
   mutate(Origine = factor(Origine) %>% fct_reorder(`Cumul des dessertes`)) %>% 
   pivot_longer(c(`Cumul des dessertes`,`Cumul des passagers`)) 
-ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 villes sur la base de leurs flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Quantité (millions)")+ylab(NULL)
+ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 des villes par leurs flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Nombre (millions)")+ylab(NULL)
 ```
 
 Au delà de la suprématie des aéroports de Paris, il semble intéressant alors de regrouper les flux des 4 premiers aéroports régionaux, séparés du reste des flux métropolitains.   
 En effet, les trois groupes ainsi formés ( Paris, Lyon-Marseille-Nice-Toulouse, et autres villes) sont alors de taille comparable en terme de   
 * nombre de dessertes (471k, 491k, 624k respectivement)  
-* nombre de passagers transportés au total (43M, 37M, 39M respectivement)
+* nombre de passagers transportés au total (43M, 37M, 39M respectivement)  
 
 # Des flux très hétérogènes
 
