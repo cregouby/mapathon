@@ -46,10 +46,10 @@ flux_bidir <-bind_rows(flux ,
                             rename(Origine=O, lat_Origine=lat_O, lng_Origine = lng_O)) %>% 
   mutate_at(flux_mesures, ~./2)
 
-top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Cumul des dessertes` = sum(Dessertes), `Cumul des passagers` = sum(Pax_Total)) %>% slice_max(`Cumul des dessertes`,n=15) %>% 
-  mutate(Origine = factor(Origine) %>% fct_reorder(`Cumul des dessertes`)) %>% 
-  pivot_longer(c(`Cumul des dessertes`,`Cumul des passagers`)) 
-ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Aéroports métropolitains", subtitle = "Top 15 des villes par leurs flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Nombre (millions)")+ylab(NULL)
+top_10 <- flux_bidir %>% group_by(Origine) %>% summarise(`Dessertes métropolitaines` = sum(Dessertes), `Passagers métropolitains` = sum(Pax_Total)) %>% slice_max(`Dessertes métropolitaines`,n=15) %>% 
+  mutate(Origine = factor(Origine) %>% fct_reorder(`Dessertes métropolitaines`)) %>% 
+  pivot_longer(c(`Dessertes métropolitaines`,`Passagers métropolitains`)) 
+ggplot(top_10)+geom_col(aes(x=value/1e6, y=Origine)) + facet_wrap(.~name, scales="free_x")+ theme_minimal()+labs(title="Flux dans les aéroports métropolitains", subtitle = "Top 15 des villes, flux d'aviation civile en 2019, source gflowviz/DGAC.csv")+xlab("Nombre (millions)")+ylab(NULL)
 ```
 
 Au delà de la suprématie des aéroports de Paris, il semble intéressant alors de regrouper les flux des 4 premiers aéroports régionaux, séparés du reste des flux métropolitains.   
@@ -63,7 +63,7 @@ On prend l'hypothèse que les flux de passagers sont symétriques, i.e. que les 
 
 ## Paris
 
-Les flux des seuls aéroports de **Paris** *(utiliser la souris pour zoomer et centrer)*  
+Les flux métropolitains des seuls aéroports de **Paris** *(utiliser la souris pour zoomer et centrer)*  
 ```{r }
 flux_gg <- flux_bidir %>% # filter(Annee%in%c("2019", "2009", "1999")) %>%
   mutate(#scaled_pax_total = scale(log_pax_total/max(log_pax_total, na.rm = T))*5,
@@ -79,7 +79,8 @@ flux_region <- flux_gg %>% filter(Origine !="PARIS", Destination!="PARIS")
 flux_lyon <- flux_region %>% filter(Origine =="LYON" | Destination=="LYON")
 flux_lmnt <- flux_region %>% filter(Origine %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) | Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ) ) 
 flux_region <- flux_region %>% filter(!Origine  %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" ),! Destination %in% c("LYON", "MARSEILLE", "NICE", "TOULOUSE" )) 
-### Paris
+### Generique mapdeck plot
+manual_palette <- grDevices::colorRamp(c("yellow", "yellow"))( (1:256)/256 )
 mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
   speed <- unique(flux_df$desserte_cut)
   mapdeck(min_zoom = 4,  width=width, height=height, style = mapdeck_style("dark"), location = c(2.2089954941016994,45.92548789927358), ... ) %>% 
@@ -96,7 +97,8 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      trail_length = 10,
                      tooltip = "info",
                      auto_highlight = TRUE,
-                     update_view = FALSE
+                     update_view = FALSE,
+                     palette = manual_palette
     ) %>% 
     add_animated_arc(data=flux_df %>% filter(desserte_cut>min(speed), desserte_cut<max(speed)), 
                      layer_id = "speed_med",
@@ -110,7 +112,8 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      trail_length = 10,
                      tooltip = "info",
                      auto_highlight = TRUE,
-                     update_view = FALSE
+                     update_view = FALSE,
+                     palette = manual_palette
     ) %>% 
     add_animated_arc(data=flux_df %>% filter(desserte_cut==max(speed)), 
                      layer_id = "speed_max",
@@ -124,7 +127,8 @@ mapdeck_flux <- function(flux_df, width=350, height=350, ...) {
                      trail_length = 10,
                      tooltip = "info",
                      auto_highlight = TRUE,
-                     update_view = FALSE
+                     update_view = FALSE,
+                     palette = manual_palette
     )  
 }
 # animation_speed = flux_paris  %>% summarise(speed=median(desserte_cut))
@@ -204,4 +208,15 @@ Ce hub qui dessinait une centre inter-régional en 1999, s˚éteint en 10 ans, s
 La décentralisation des lignes et leur multiplication entre les autres villes dessine en 2019 une carte nouvelle qui prend nouvellement la forme des contours de l'hexagone. 
 
 
+# Les passagers en transit
+
+```{r}
+eurostat <- read_csv(here("data/external/Eurostats_long.csv")) %>% 
+  pivot_wider(names_from = tra_meas, values_from=n) %>% 
+  mutate(date = ymd(str_c(date, "-01"))) %>% select(-annee,-mois) %>% 
+  select(ville, date, ac_tot=ACM, ac_commercial=CACM, fret_tot=FRM_LD_NLD, pax_tot=PAS_CRD, pax_transit=PAS_TRF, pax_transfert=PAS_TRS) %>% 
+  group_by(ville, year=year(date)) %>% 
+  filter(year==2019) %>% 
+  summarise(across(matches("_"), sum))
+```
 
